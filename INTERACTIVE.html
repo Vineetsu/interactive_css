@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Drag-and-Drop Editor with Image Upload</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f4f4f4;
+    }
+
+    #editor-container {
+      width: 100vw;
+      height: 80vh;
+      position: relative;
+      background: white;
+      border: 1px solid #ccc;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .draggable {
+      position: absolute;
+      padding: 10px;
+      background: #007bff;
+      color: white;
+      border-radius: 5px;
+      cursor: move;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .resize-handle {
+      width: 10px;
+      height: 10px;
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      background: white;
+      border: 1px solid black;
+      cursor: nwse-resize;
+    }
+
+    #toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px;
+      background: #282c34;
+      color: white;
+    }
+
+    #toolbar button, #toolbar select, #toolbar input {
+      padding: 10px 15px;
+      margin: 5px;
+      background: #61dafb;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #toolbar button:hover {
+      background: #21a1f1;
+    }
+
+    #generated-css {
+      padding: 20px;
+      font-family: monospace;
+      background: #000;
+      color: #0f0;
+      white-space: pre-wrap;
+      display: none;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="add-text">Add Text</button>
+    <button id="add-shape">Add Shape</button>
+    <button id="choose-image">Choose from Device</button>
+    <label>
+      Font Style:
+      <select id="font-style">
+        <option value="Arial">Arial</option>
+        <option value="Verdana">Verdana</option>
+        <option value="Courier New">Courier New</option>
+        <option value="Georgia">Georgia</option>
+        <option value="Times New Roman">Times New Roman</option>
+      </select>
+    </label>
+    <label>
+      Font Size:
+      <input type="number" id="font-size" value="16" min="10" max="100"> px
+    </label>
+    <label>
+      Font Color:
+      <input type="color" id="font-color" value="#ffffff">
+    </label>
+    <label>
+      Background Color:
+      <input type="color" id="bg-color" value="#007bff">
+    </label>
+    <button id="generate-css">Generate CSS</button>
+  </div>
+  <div id="editor-container"></div>
+  <pre id="generated-css"></pre>
+
+  <!-- Hidden file input for image selection -->
+  <input type="file" id="image-upload" accept="image/*" />
+
+  <script>
+    const editorContainer = document.getElementById('editor-container');
+    const addTextButton = document.getElementById('add-text');
+    const addShapeButton = document.getElementById('add-shape');
+    const chooseImageButton = document.getElementById('choose-image');
+    const fontStyleSelect = document.getElementById('font-style');
+    const fontSizeInput = document.getElementById('font-size');
+    const fontColorInput = document.getElementById('font-color');
+    const bgColorInput = document.getElementById('bg-color');
+    const generateCSSButton = document.getElementById('generate-css');
+    const generatedCSS = document.getElementById('generated-css');
+    const imageUploadInput = document.getElementById('image-upload');
+
+    let currentElement = null;
+
+    // Helper function to create a new draggable element (for shape or text)
+    function createDraggable(type) {
+      const element = document.createElement('div');
+      element.className = 'draggable';
+
+      if (type === 'text') {
+        element.textContent = 'Editable Text';
+        element.style.fontSize = '16px';
+        element.contentEditable = true;  // Allow inline text editing
+      } else if (type === 'shape') {
+        element.style.background = '#ff6347';
+        element.style.width = '200px';  // Default width of the shape box
+        element.style.height = '200px';  // Default height of the shape box
+
+        // Create an img element inside the shape box
+        const img = document.createElement('img');
+        img.src = 'https://via.placeholder.com/200'; // Default image (placeholder)
+        img.style.width = '100%';  // Ensure the image fills the width of the box
+        img.style.height = '100%'; // Ensure the image fills the height of the box
+        img.style.objectFit = 'cover'; // Ensure the image covers the entire box without distorting its aspect ratio
+
+        element.appendChild(img);
+      }
+
+      element.style.top = '50px';
+      element.style.left = '50px';
+
+      // Add resize handle
+      const resizeHandle = document.createElement('div');
+      resizeHandle.className = 'resize-handle';
+      element.appendChild(resizeHandle);
+
+      // Enable dragging
+      enableDragging(element);
+
+      // Set current element for font customization
+      element.addEventListener('click', () => {
+        currentElement = element;
+        updateToolbarForElement(element);
+      });
+
+      editorContainer.appendChild(element);
+    }
+
+    // Update toolbar to reflect the selected element's styles
+    function updateToolbarForElement(element) {
+      const computedStyles = getComputedStyle(element);
+      fontStyleSelect.value = computedStyles.fontFamily.replace(/"/g, '');
+      fontSizeInput.value = parseInt(computedStyles.fontSize);
+      fontColorInput.value = rgbToHex(computedStyles.color);
+      bgColorInput.value = rgbToHex(computedStyles.backgroundColor);
+    }
+
+    // Convert RGB color to HEX
+    function rgbToHex(rgb) {
+      const rgbValues = rgb.match(/\d+/g);
+      return `#${rgbValues
+        .map((val) => parseInt(val).toString(16).padStart(2, '0'))
+        .join('')}`;
+    }
+
+    // Enable dragging and resizing on an element
+    function enableDragging(element) {
+      let isDragging = false;
+      let isResizing = false;
+      let startX, startY, startWidth, startHeight;
+
+      element.addEventListener('mousedown', (e) => {
+        if (e.target === element) {
+          isDragging = true;
+          currentElement = element;
+          startX = e.clientX - element.offsetLeft;
+          startY = e.clientY - element.offsetTop;
+        } else if (e.target.classList.contains('resize-handle')) {
+          isResizing = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          startWidth = parseInt(document.defaultView.getComputedStyle(element).width, 10);
+          startHeight = parseInt(document.defaultView.getComputedStyle(element).height, 10);
+        }
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+          element.style.left = `${e.clientX - startX}px`;
+          element.style.top = `${e.clientY - startY}px`;
+        } else if (isResizing) {
+          const width = startWidth + (e.clientX - startX);
+          const height = startHeight + (e.clientY - startY);
+          element.style.width = `${width}px`;
+          element.style.height = `${height}px`;
+
+          // Adjust the image size proportionally when the box is resized
+          const img = element.querySelector('img');
+          if (img) {
+            img.style.width = '100%';
+            img.style.height = '100%';
+          }
+        }
+      });
+
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
+        isResizing = false;
+      });
+    }
+
+    // Add event listeners to toolbar controls
+    fontStyleSelect.addEventListener('change', () => {
+      if (currentElement) {
+        currentElement.style.fontFamily = fontStyleSelect.value;
+      }
+    });
+
+    fontSizeInput.addEventListener('input', () => {
+      if (currentElement) {
+        currentElement.style.fontSize = `${fontSizeInput.value}px`;
+      }
+    });
+
+    fontColorInput.addEventListener('input', () => {
+      if (currentElement) {
+        currentElement.style.color = fontColorInput.value;
+      }
+    });
+
+    bgColorInput.addEventListener('input', () => {
+      if (currentElement) {
+        currentElement.style.backgroundColor = bgColorInput.value;
+      }
+    });
+
+    // Add event listeners to toolbar buttons
+    addTextButton.addEventListener('click', () => createDraggable('text'));
+    addShapeButton.addEventListener('click', () => createDraggable('shape'));
+
+    // Image upload button functionality
+    chooseImageButton.addEventListener('click', () => {
+      imageUploadInput.click();
+    });
+
+    imageUploadInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (readerEvent) => {
+          const imageUrl = readerEvent.target.result;
+          
+          // Add image to the shape box
+          const shapeBoxes = document.querySelectorAll('.draggable');
+          shapeBoxes.forEach((shapeBox) => {
+            const img = shapeBox.querySelector('img');
+            if (img) {
+              img.src = imageUrl;
+            }
+          });
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Generate CSS for all elements
+    generateCSSButton.addEventListener('click', () => {
+      const elements = document.querySelectorAll('.draggable');
+      let css = '';
+
+      elements.forEach((el, index) => {
+        const styles = window.getComputedStyle(el);
+        css += `
+.element-${index + 1} {
+  position: absolute;
+  top: ${styles.top};
+  left: ${styles.left};
+  width: ${styles.width};
+  height: ${styles.height};
+  background: ${styles.backgroundColor};
+  color: ${styles.color};
+  font-family: ${styles.fontFamily};
+  font-size: ${styles.fontSize};
+  padding: ${styles.padding};
+  margin: ${styles.margin};
+}
+`;
+      });
+
+      generatedCSS.textContent = css;
+      generatedCSS.style.display = 'block';
+    });
+  </script>
+</body>
+</html>
