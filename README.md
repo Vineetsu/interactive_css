@@ -1,4 +1,4 @@
-# interactive_css
+
 # 🎨 Interactive CSS Project
 
 An interactive and visually engaging project built using HTML, CSS, and JavaScript. This project showcases various CSS animations, transitions, hover effects, and interactive elements to demonstrate the power and creativity of modern CSS.
@@ -19,8 +19,9 @@ An interactive and visually engaging project built using HTML, CSS, and JavaScri
 
 ## 📸 Preview
 
-![Project Screenshot](screenshot.png)  
-*Add your own screenshot in the project directory.*
+<p align="center">
+  <img src="Screenshot 2025-05-10 193331.png" alt="ScribShoe UI" width="90%" />
+</p>
 
 ## 🚀 Getting Started
 
