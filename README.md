@@ -28,4 +28,4 @@ To run this project locally:
 
 1. Clone the repo:
    ```bash
-   git clone https://github.com/yourusername/interactive-css-project.git
+   git clone https://github.com/Vineetsu/interactive-css-project.git
